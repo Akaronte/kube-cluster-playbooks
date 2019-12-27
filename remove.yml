@@ -1,0 +1,33 @@
+- hosts: all
+  tasks:
+  - name: Destroy cluster
+    block:
+      - name: kubeadm
+        shell: kubeadm reset -f
+    ignore_errors: yes
+  - name: remove kubelet
+    yum:
+      name: kubelet
+      state: absent
+  - name: remove kubeadm
+    yum:
+      name: kubeadm
+      state: absent
+  - name: remove kubectl
+    yum:
+      name: kubectl
+      state: absent
+  - name: remove docker-ce
+    yum:
+      name: docker-ce
+      state: absent
+  - name: remove docker-ce-cli
+    yum:
+      name: docker-ce-cli
+      state: absent
+  - name: remove containerd.io
+    yum:
+      name: containerd.io
+      state: absent
+  - name: reboot
+    reboot:

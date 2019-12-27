@@ -1,0 +1,12 @@
+- hosts: all
+  vars:
+    - docker_version: '18.09.9-3.el7.x86_64'
+    - kube_version: '1.14.7-0'
+  tasks:
+  - name: Install kubernetes
+    yum:
+      name:
+        - "kubeadm-{{ kube_version }}"
+        - "kubelet-{{ kube_version }}"
+        - "kubectl-{{ kube_version }}"
+      state: present
