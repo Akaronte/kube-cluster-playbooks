@@ -11,7 +11,7 @@
   - name: disable swap fstab
     replace:
       path: /etc/fstab
-      regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+      regexp: '^([^#].*?\s+swap\s+sw\s+.*)$'
       replace: '# \1'
   - name: Active netfiter
     shell: modprobe br_netfilter
