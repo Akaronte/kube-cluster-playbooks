@@ -9,7 +9,8 @@
   - name: Disable SWAP
     shell: swapoff -a
   - name: disable swap fstab
-    shell: line=$(grep -n -m 1 swap /etc/fstab | cut -d ":" -f 1) && sed -e "${line}s/^/#/" /etc/fstab > /etc/fstab
+    shell: cp /etc/fstab /etc/fstab.bk
+    shell: line=$(grep -n -m 1 swap /etc/fstab | cut -d ":" -f 1) && sed -e "${line}s/^/#/" /etc/fstab > /etc/fstab.bk
   - name: Active netfiter
     shell: modprobe br_netfilter
   - name: Test netfilter config
