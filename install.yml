@@ -8,9 +8,10 @@
       state: disabled
   - name: Disable SWAP
     shell: swapoff -a
-  - name: disable swap fstab
-    shell: cp /etc/fstab /etc/fstab.bk
+  - name: Create disable swap fstab
     shell: line=$(grep -n -m 1 swap /etc/fstab | cut -d ":" -f 1) && sed -e "${line}s/^/#/" /etc/fstab > /etc/fstab.bk
+  - name: Disabled Swap
+    shell: cp /etc/fstab.bk /etc/fstab
   - name: Active netfiter
     shell: modprobe br_netfilter
   - name: Test netfilter config
