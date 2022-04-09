@@ -1,0 +1,127 @@
+- hosts: all
+  tasks:
+  - name: Disable SELinux
+    selinux:
+      state: disabled
+  - name: Disable SWAP
+    shell: swapoff -a
+  - name: Create disable swap fstab
+    shell: line=$(grep -n -m 1 swap /etc/fstab | cut -d ":" -f 1) && sed -e "${line}s/^/#/" /etc/fstab > /etc/fstab.bk
+  - name: Disabled Swap
+    shell: cp /etc/fstab.bk /etc/fstab
+  - name: Active netfiter
+    shell: modprobe br_netfilter
+  - name: Test netfilter config
+    shell: if grep -q "^net.ipv4.ip_forward = 1" /etc/sysctl.conf; then echo false; else echo true;  fi
+    register: test_grep
+  - name: enable netfiler
+    lineinfile:
+      dest: /etc/sysctl.conf
+      line: net.ipv4.ip_forward = 1
+    when: test_grep.stdout == "true"
+  - name: disable firewall
+    shell: systemctl stop firewalld && systemctl disable firewalld && systemctl mask --now firewalld
+  - name: Add epel-release repo and utils
+    yum:
+      name: ['epel-release','yum-utils','device-mapper-persistent-data','lvm2','wget']
+  - name: Creating a repository file for Kubernetes
+    file:
+     path: /etc/yum.repos.d/kubernetes.repo
+     state: touch
+  - name: Adding repository details in Kubernetes repo file.
+    blockinfile:
+     path: /etc/yum.repos.d/kubernetes.repo
+     block: |
+        [kubernetes]
+        name=Kubernetes
+        baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+        enabled=1
+        gpgcheck=0
+        repo_gpgcheck=0
+        gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
+                https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+  - name: Install kubernetes
+    yum:
+      name:
+        - "kubeadm-1.23.2-0"
+        - "kubelet-1.23.2-0"
+        - "kubectl-1.23.2-0"
+      state: present
+  - name: Enable br_netfilter
+    shell: |
+      cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+      br_netfilter
+      EOF
+  - name: Enable bridge nf call k8s.conf
+    shell: |
+      cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.bridge.bridge-nf-call-iptables = 1
+      EOF
+  - name: sysctl
+    shell: sudo sysctl --system
+  - name: Download containers-common
+    shell: wget https://rpmfind.net/linux/centos/7.9.2009/extras/x86_64/Packages/containers-common-0.1.40-11.el7_8.x86_64.rpm
+  - name: Install package.
+    yum:
+      name: containers-common-0.1.40-11.el7_8.x86_64.rpm
+      state: present
+  - name: enable Kubelet
+    shell: systemctl enable --now kubelet
+  - name: Adding 10-kubeadm.conf
+    blockinfile:
+     path: /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
+     block: |
+      # Note: This dropin only works with kubeadm and kubelet v1.11+
+      [Service]
+      Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+      Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
+      # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+      EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+      # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+      # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+      ## The following line to be added for CRI-O
+      Environment="KUBELET_CGROUP_ARGS=--cgroup-driver=systemd"
+      EnvironmentFile=-/etc/sysconfig/kubelet
+      ExecStart=
+      ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS $KUBELET_CGROUP_ARGS
+  - name: Adding repository details in Kubernetes-devlevel repo file.
+    shell: |
+      cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes-devlevel.repo
+      [devel_kubic_libcontainers_stable]
+      name=Stable Releases of Upstream github.com/containers packages (CentOS_7)
+      type=rpm-md
+      baseurl=https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/CentOS_7/
+      gpgcheck=1
+      gpgkey=https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/CentOS_7/repodata/repomd.xml.key
+      enabled=1
+      EOF
+  - name: Download containers-common rpm
+    shell: wget https://rpmfind.net/linux/centos/7.9.2009/extras/x86_64/Packages/containers-common-0.1.40-11.el7_8.x86_64.rpm
+  - name: Install containers-common.
+    yum:
+      name: ./containers-common-0.1.40-11.el7_8.x86_64.rpm
+      state: present
+  - name: Install cri-o repos
+    shell: |
+      VERSION=1.23
+      OS=CentOS_7
+      sudo curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable.repo https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/devel:kubic:libcontainers:stable.repo
+      sudo curl -L -o /etc/yum.repos.d/devel:kubic:libcontainers:stable:cri-o:$VERSION.repo https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:$VERSION/$OS/devel:kubic:libcontainers:stable:cri-o:$VERSION.repo
+  - name: Install cri-o 
+    yum:
+      name:
+        - "cri-o "
+        - "cri-tools"
+      state: present
+  - name: Start cri-o 
+    shell: |
+      systemctl daemon-reload
+      systemctl enable crio --now
+      systemctl enable kubelet --now
+  - name: Start kubelet
+    shell: systemctl enable kubelet
+  - name: reboot
+    reboot:
+
+
